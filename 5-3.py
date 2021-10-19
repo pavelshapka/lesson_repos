@@ -1,30 +1,31 @@
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt #Импорт необходимых библиотек
 import RPi.GPIO as GPIO
 import time
+import math
 
-dac = [26, 19, 13, 6, 5, 11, 9, 10]
-leds = [21, 20, 16, 12, 7, 8, 25, 24]
+dac = [26, 19, 13, 6, 5, 11, 9, 10] #Пины панели DAC
+leds = [21, 20, 16, 12, 7, 8, 25, 24] #Пины панели LEDS
 bits = len(dac)
 levels = 2**bits
 maxVoltage = 3.3
 TroykaMoudle = 17
 comparator = 4
-val = []
+adcData = [] #Файл с данными с АЦП
 
-GPIO.setmode(GPIO.BCM)
+GPIO.setmode(GPIO.BCM) #инициализация пинов
 GPIO.setup(dac + leds, GPIO.OUT, initial = GPIO.LOW)
 GPIO.setup(TroykaMoudle, GPIO.OUT, initial = GPIO.HIGH)
 GPIO.setup(comparator, GPIO.IN)
 
-def decimal2binary(i):
+def decimal2binary(i): #функция перевода числа в двоичный код
     return [int(elem) for elem in bin(i)[2:].zfill(bits)]
 
-def bin2dac(i): 
+def bin2dac(i): #функция отображения числа на панели dac
      signal = decimal2binary(i)
      GPIO.output(dac, signal)
      return signal
 
-def adc():
+def adc(): #функция, которая с помощью побитового сдвига находит значение на компараторе
     value = 0
     for i in range(7, -1, -1):
         bin2dac(value + 2 ** i)
@@ -42,31 +43,32 @@ try:
     while True:
         value = adc() #Считываем аналоговый сигнал с конденсатора
         GPIO.output(leds, decimal2binary(value)) #Отображаем значение value на панели leds
-        if value >= 245 and chek: #Если зарядились, то отключаем питание
+        if value >= 100 and chek: #Если зарядились, то отключаем питание
             GPIO.output(17, 0)
             print('Началась разрядка конденастора')
             chek = False
-        if chek == False and value <= 5: #Если зарядились, то заканчиваем эксперимент
+        if chek == False and value <= 1:
+            adcData.append(value) #Если зарядились, то заканчиваем эксперимент
             end = time.time() #засекаем конец эксперимента
-            T = (end - start)/(len(val)-1) #Считаем период
-            ny = 1/T #Считаем частоту
+            T = round((end - start)/(len(adcData)-1), 5) #Считаем период
+            ny = round(1/T, 5) #Считаем частоту
             break
-        val.append(value) #Добавляем значение в список всех аналоговых значений 
-        voltage = maxVoltage / levels * value
+        adcData.append(value) #Добавляем значение в список всех аналоговых значений 
+        voltage = maxVoltage / levels * value #Считаем напряжение
         print("digital value =  {:^3}, analog VOLTAGE = {:.2f}".format(value, voltage))
     
-    plt.plot(val)
-    with open('data.txt', 'w') as f1:
-        for i in range(len(val)):
-            f1.write(str(val[i]) + '\n')          
-    with open('settings.txt', 'w') as f2:
+    plt.plot(adcData) #Строим график
+    with open('data.txt', 'w') as f1: #Создаем и заполняем файл data.txt
+        for i in range(len(adcData)):
+            f1.write(str(adcData[i]) + '\n')          
+    with open('settings.txt', 'w') as f2: #Создаем и заполняем файл settings.txt
         f2.write('T = ' + str(T) + '\n')
         f2.write('Ny = '+ str(ny))
         
-    plt.show()
+    plt.show() #Выводим график
     
 except KeyboardInterrupt:
     print("Прервано")
 finally:
-    GPIO.output(dac + leds, GPIO.LOW)
+    GPIO.output(dac + leds, GPIO.LOW) #Обнуляем подачу напряжения
     GPIO.cleanup(dac)
